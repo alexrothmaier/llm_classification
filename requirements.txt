@@ -1,0 +1,8 @@
+torch
+pydantic
+matplotlib
+numpy
+pandas
+scipy
+transformers
+datasets

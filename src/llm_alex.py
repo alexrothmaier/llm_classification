@@ -6,20 +6,25 @@ from typing import List, Optional, Any, Union
 
 from transformers import pipeline, Pipeline
 
+from langchain_core.language_models.llms import LLM
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+
 # from src.ml.classifier.llm.util.hf_login import login_to_hf
 
 # from src.ml.classifier.llm.api.base import BaseRemoteLLM
 
 # login_to_hf()
 
-class Llama(BaseModel):
+
+class Llama(LLM):
 
     _name: str = "meta-llama/Meta-Llama-3-8B-Instruct"
     _system_msg: str = "You are a helpful assistant"
-    _device: str = "cpu"
+    _device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    print(_device)
     pipeline: Optional[Pipeline] = None
     terminators: List[Union[None, int]] = []
-    cache: dict = dict()
+    #cache: dict = dict()
 
     class Config:
         arbitrary_types_allowed=True
@@ -30,6 +35,7 @@ class Llama(BaseModel):
             model=self._name,
             model_kwargs={"torch_dtype": torch.bfloat16},
             device=self._device,
+            pad_token_id=128009
         )
 
         self.terminators = [
@@ -40,8 +46,9 @@ class Llama(BaseModel):
 
 
 
+    def __call__(self, *, query: str, **kwargs) -> str:
 
-    def __call__(self, *, prompt: str, **kwargs) -> str:
+        prompt = query
         if self.pipeline is None:
             self.setup()
 
@@ -62,8 +69,8 @@ class Llama(BaseModel):
                 add_generation_prompt=True
         )
 
-        if prompt in self.cache:
-            return self.cache[prompt]
+        #if prompt in self.cache:
+            #return self.cache[prompt]
 
 
 
@@ -75,19 +82,42 @@ class Llama(BaseModel):
             temperature=0.001,
             top_p=0.9
         )
-
+        input_tokens_length = len(self.pipeline.tokenizer.encode(prompt))
+        prompt_length = len(prompt)
+        
         answer = outputs[0]["generated_text"][len(prompt):]
 
         try:
             # extract json_str from the answer
             # Extract the JSON part from the text
-            start_index = answer.find('{')
-            end_index = answer.rfind('}') + 1
-            answer = answer[start_index:end_index]
+            #start_index = answer.find('{')
+            #end_index = answer.rfind('}') + 1
+            #answer = answer[start_index:end_index]
+            answer = answer
+            return answer
         except Exception as e:
             print(e)
-        self.cache[prompt] = answer
-        return answer
+       # self.cache[prompt] = answer
+        return  {
+            "answer": answer,
+            "input_tokens": input_tokens_length,
+            "prompt_length": prompt_length
+        }
+        
+
+    def _call(
+            self,
+            prompt: str,
+            stop: Optional[List[str]] = None,
+            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+        ) -> str:
+
+       return self.__call__(query=prompt)
+ 
+    @property
+    def _llm_type(self) -> str:
+        return self.name
 
 
 
